@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -22,6 +23,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @Slf4j
@@ -29,6 +31,9 @@ import java.util.Map;
 public class UserController {
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
     //获取验证码
     @Transactional
     @PostMapping("/sendMsg")
@@ -47,7 +52,9 @@ public class UserController {
             userService.sendMsg(email,subject,text);
             //将验证码保存到session当中
             log.info("email:{},code:{}",email,code);
-           request.getSession().setAttribute(email,code);
+           //request.getSession().setAttribute(email,code);
+           //将验证码保存到Redis中，并且设置有效期为五分钟
+            redisTemplate.opsForValue().set(email,code,5, TimeUnit.MINUTES);
             return R.success("验证码发送成功");
         }
         return R.error("验证码发送异常，请重新发送");
@@ -62,7 +69,9 @@ public class UserController {
         //获取验证码，用户输入的
         String code = map.get("code").toString();
         //获取session中保存的验证码
-        Object sessionCode = request.getSession().getAttribute(phone);
+        //Object sessionCode = request.getSession().getAttribute(phone);
+        //从Redis中获取验证码
+        Object sessionCode = redisTemplate.opsForValue().get(phone);
         //如果session的验证码和用户输入的验证码进行比对,&&同时
         if (sessionCode != null && sessionCode.equals(code)) {
             //要是User数据库没有这个邮箱则自动注册,先看看输入的邮箱是否存在数据库
@@ -81,6 +90,8 @@ public class UserController {
             }
             //不保存这个用户名就登不上去，因为过滤器需要得到这个user才能放行，程序才知道你登录了
             request.getSession().setAttribute("user",user.getId());
+            //用户登录成功，删除Redis中缓存的验证码
+            redisTemplate.delete(phone);
             return R.success(user);
         }
         return R.error("登录失败");
