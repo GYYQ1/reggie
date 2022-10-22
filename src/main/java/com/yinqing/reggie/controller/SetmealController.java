@@ -17,6 +17,8 @@ import com.yinqing.reggie.service.SetmealService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -45,6 +47,7 @@ public class SetmealController {
      * @return
      */
     @PostMapping
+    @CacheEvict(value = "setmealCache",allEntries = true)
     public R<String>save(@RequestBody SetmealDto setmealDto){
         setmealService.setWithDish(setmealDto);
 
@@ -101,8 +104,10 @@ public class SetmealController {
      * 套餐删除
      * @param ids
      * @return
+     * allEntries = true 删除全部缓存数据
      */
     @DeleteMapping
+    @CacheEvict(value = "setmealCache",allEntries = true)
     public R<String>delete(@RequestParam List<Long>ids){
         if(ids==null){
             throw new CustomException("请先勾选套餐");
@@ -110,7 +115,14 @@ public class SetmealController {
         setmealService.removeWithSetmeal(ids);
         return R.success("套餐删除成功");
     }
-@PostMapping("/status/{status}")
+
+    /**
+     * 更新套餐状态
+     * @param status
+     * @param ids
+     * @return
+     */
+    @PostMapping("/status/{status}")
     public R<String>updateStatusWithSetmeal(@PathVariable Integer status,@RequestParam List<Long>ids){
                 for(Long id:ids){
                     Setmeal setmeal = setmealService.getById(id);
@@ -179,6 +191,7 @@ public class SetmealController {
      * @return
      */
     @GetMapping("/list")
+    @Cacheable(value = "semealCache",key = "#setmeal.categoryId+'_'+#setmeal.status")
     public R<List<Setmeal>>list(Setmeal setmeal){
         LambdaQueryWrapper<Setmeal>setmealLambdaQueryWrapper=new LambdaQueryWrapper<>();
         setmealLambdaQueryWrapper.eq(setmeal.getCategoryId()!=null,Setmeal::getCategoryId,setmeal.getCategoryId());
